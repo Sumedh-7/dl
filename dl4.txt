@@ -1,0 +1,245 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import tensorflow as tf
+
+--
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import (
+    classification_report,
+    confusion_matrix,
+    roc_auc_score,
+    precision_recall_curve
+)
+
+--
+
+from tensorflow.keras import Model, Input
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.regularizers import l1
+from tensorflow.keras.optimizers import Adam
+
+--
+
+df = pd.read_csv("creditcard.csv")
+print("Dataset shape:", df.shape)
+
+--
+
+df.head()
+
+--
+
+print("\nClass distribution:")
+print(df["Class"].value_counts())
+
+
+--
+
+
+X = df.drop("Class", axis=1)
+y = df["Class"]
+
+--
+
+X = X.drop("Time", axis=1)
+scaler = StandardScaler()
+X["Amount"] = scaler.fit_transform(X[["Amount"]])
+
+--
+
+X_normal = X[y == 0]
+X_fraud = X[y == 1]
+print("Normal transactions:", len(X_normal))
+print("Fraud transactions:", len(X_fraud))
+
+
+--
+
+
+X_train, X_validation = train_test_split(
+    X_normal,
+    test_size=0.20,
+    random_state=42
+)
+print("Training normal transactions:", X_train.shape)
+print("Validation normal transactions:", X_validation.shape)
+
+--
+
+input_dim = X_train.shape[1]
+
+input_layer = Input(shape=(input_dim,))
+
+encoder = Dense(16, activation="relu")(input_layer)
+
+latent = Dense(8, activation="relu", activity_regularizer=l1(1e-5), name="latent")(encoder)
+
+decoder = Dense(16, activation="relu")(latent)
+
+output_layer = Dense(input_dim, activation="linear")(decoder)
+
+
+autoencoder = Model(
+    inputs=input_layer,
+    outputs=output_layer
+)
+
+autoencoder.summary()
+
+--
+
+autoencoder.compile(
+    optimizer=Adam(learning_rate=0.001),
+    loss="mse",
+)
+
+--
+
+H = autoencoder.fit(
+    X_train,
+    X_train,
+    epochs=10,
+    batch_size=256,
+    validation_data=(X_validation, X_validation),
+    shuffle=True,
+    verbose=1
+)
+
+--
+
+plt.figure(figsize=(8, 5))
+
+plt.plot(
+    H.history["loss"],
+    label="Training Loss"
+)
+
+plt.plot(
+    H.history["val_loss"],
+    label="Validation Loss"
+)
+
+plt.xlabel("Epoch")
+plt.ylabel("MSE Loss")
+plt.title("Sparse Autoencoder Training Loss")
+
+plt.legend()
+plt.show()
+
+--
+
+X_val_pred = autoencoder.predict(
+    X_validation,
+    verbose=0
+)
+
+--
+
+normal_errors = np.mean(np.square(X_validation.values - X_val_pred),axis=1)
+print("Average reconstruction loss:", np.mean(normal_errors))
+print("Maximum normal reconstruction error:", np.max(normal_errors))
+
+--
+
+threshold = np.percentile(normal_errors, 99.5)
+print("Anomaly threshold:", threshold)
+
+--
+
+X_test = pd.concat([X_validation, X_fraud],)
+
+y_test = np.concatenate([
+    np.zeros(len(X_validation)),  # Normal
+    np.ones(len(X_fraud))         # Fraud
+])
+
+--
+
+indices = np.random.RandomState(42).permutation(
+    len(X_test)
+)
+
+X_test = X_test.iloc[indices]
+y_test = y_test[indices]
+
+--
+
+X_test_pred = autoencoder.predict(
+    X_test,
+    verbose=0
+)
+
+--
+
+test_errors = np.mean(
+    np.square(
+        X_test.values - X_test_pred
+    ),
+    axis=1
+)
+
+--
+
+y_pred = (
+    test_errors > threshold
+).astype(int)
+
+print("Number of detected anomalies:",
+      np.sum(y_pred))
+
+
+--
+
+cm = confusion_matrix(
+    y_test,
+    y_pred
+)
+
+print("Confusion Matrix:")
+print(cm)
+
+--
+
+print("\nClassification Report:")
+
+print(
+    classification_report(
+        y_test,
+        y_pred,
+        target_names=["Normal", "Fraud"]
+    )
+)
+
+--
+
+fraud_indices = df[df["Class"] == 1].index[:10]
+
+print(fraud_indices.tolist())
+
+--
+
+index = int(input("Enter transaction index: "))
+
+transaction = X.loc[[index]]
+
+reconstructed = autoencoder.predict(transaction,verbose=0)
+
+reconstruction_loss = np.mean(np.square(transaction.values - reconstructed),axis=1)[0]
+
+if reconstruction_loss > threshold:
+    result = "FRAUD"
+else:
+    result = "NORMAL"
+
+print("\nReconstruction Loss:", reconstruction_loss)
+print("Threshold:", threshold)
+print("Prediction:", result)
+
+
+
+
+
+

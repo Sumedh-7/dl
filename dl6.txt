@@ -1,0 +1,157 @@
+import tensorflow_datasets as tfds
+import tensorflow as tf
+import random
+from tensorflow.keras.utils import to_categorical
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from tensorflow.keras import layers, models
+
+--
+
+(train_ds, train_labels), (test_ds, test_labels) = tfds.load(
+    "tf_flowers",
+    split=["train[:70%]", "train[70%:85%]"],
+    batch_size=-1,
+    as_supervised=True,
+)
+
+--
+
+train_ds[0].shape
+
+--
+
+train_ds = tf.image.resize(train_ds, (96, 96))
+test_ds = tf.image.resize(test_ds, (96, 96))
+
+--
+
+train_labels = to_categorical(train_labels, num_classes=5)
+test_labels = to_categorical(test_labels, num_classes=5)
+
+--
+
+train_labels[0]
+
+--
+
+from tensorflow.keras.applications.vgg16 import VGG16
+from tensorflow.keras.applications.vgg16 import preprocess_input
+
+--
+
+train_ds[0].shape
+
+--
+
+base_model = VGG16(
+    weights="imagenet",
+    include_top=False,
+    input_shape=(96, 96, 3)
+)
+
+--
+
+base_model.trainable = False
+
+--
+
+test_images = test_ds.numpy().copy()
+
+train_ds = preprocess_input(train_ds)
+test_ds = preprocess_input(test_ds)
+
+--
+
+base_model.summary()
+
+--
+
+flatten_layer = layers.Flatten()
+dense_layer_1 = layers.Dense(50, activation='relu')
+dense_layer_2 = layers.Dense(20, activation='relu')
+prediction_layer = layers.Dense(5, activation='softmax')
+
+
+model = models.Sequential([
+    base_model,
+    flatten_layer,
+    dense_layer_1,
+    dense_layer_2,
+    prediction_layer
+])
+
+--
+
+from tensorflow.keras.callbacks import EarlyStopping
+
+model.compile(
+    optimizer='adam',
+    loss='categorical_crossentropy',
+    metrics=['accuracy'],
+)
+
+--
+
+es = EarlyStopping(monitor='val_accuracy', mode='max', patience=5,  restore_best_weights=True)
+
+--
+
+history = model.fit(
+    train_ds, train_labels,
+    epochs=1,
+    validation_split=0.2,
+    batch_size=16,
+    callbacks=[es]
+)
+
+--
+
+los,accurac=model.evaluate(test_ds,test_labels)
+print("Loss: ",los,"Accuracy: ", accurac)
+
+--
+
+y_pred = model.predict(test_ds)
+y_classes = [np.argmax(element) for element in y_pred]
+print(y_classes[:10])
+print("\nTest")
+print(test_labels[:10])
+
+--
+
+# Flower class names
+class_names = tfds.builder("tf_flowers").info.features["label"].names
+
+# Select a random test image
+index = random.randint(0, len(test_ds) - 1)
+
+# Predict the flower
+image = test_ds[index:index+1]
+prediction = model.predict(image, verbose=0)
+
+predicted_class = np.argmax(prediction[0])
+confidence = np.max(prediction[0]) * 100
+
+# Actual flower name
+actual_class = np.argmax(test_labels[index])
+
+# Display image and prediction
+plt.figure(figsize=(5, 5))
+plt.imshow(test_images[index].astype("uint8"))
+plt.axis("off")
+
+print(
+    f"Predicted: {class_names[predicted_class]}\n"
+    f"Actual: {class_names[actual_class]}\n"
+    f"Confidence: {confidence:.2f}%"
+)
+
+if predicted_class == actual_class:
+    print("Correctly Classified")
+else:
+    print("Incorrect Classification")
+
+plt.show()
+

@@ -1,0 +1,152 @@
+import matplotlib.pyplot as plt
+from nltk.tokenize import sent_tokenize, word_tokenize
+import warnings
+warnings.filterwarnings(action = 'ignore')
+import gensim
+from gensim.models import Word2Vec
+import re
+import nltk
+
+--
+
+nltk.download('punkt')
+nltk.download('stopwords')
+
+--
+
+sentences="""Alice 23 opened the door and found that it led into a small 90
+passage, not much larger than a rat-hole: she knelt down and
+looked along the passage into the loveliest garden you ever saw.
+How she longed to get out of that dark hall, and wander about
+among those beds of bright flowers and those cool fountains, but
+she could not even get her head through the doorway; `and even if
+my head would go through,' (thought) $poor Alice, `it would be of
+very little use without my shoulders. Oh, how I wish
+I could shut up like a telescope! I think I could, if I only
+know how to begin.' For, you see, so many out-of-the-way things
+had happened lately, that Alice had begun to think that very few
+things indeed were really impossible.
+"""
+
+--
+
+
+sentences = re.sub('[^A-Za-z0-9]+', ' ', sentences)
+sentences = re.sub(r'(?:^| )\w(?:$| )', ' ', sentences).strip()
+print(sentences)
+
+--
+
+sentences = re.sub('[^A-Za-z]+', ' ', sentences)
+sentences = re.sub(r'(?:^| )\w(?:$| )', ' ', sentences).strip()
+sentences = sentences.lower()
+
+all_sent=nltk.sent_tokenize(sentences)
+all_words=[nltk.word_tokenize(sent) for sent in all_sent]
+
+from nltk.corpus import stopwords
+for i in range(len(all_words)):
+  all_words[i]=[w for w in all_words[i] if w not in stopwords.words('english')]
+data =all_words
+data1=data[0]
+
+
+--
+
+
+model1 = gensim.models.Word2Vec(data, min_count = 1,vector_size = 52, window = 5, sg=0)
+
+--
+
+
+vocabulary = model1.wv.key_to_index
+print(vocabulary)
+
+--
+
+wrd=input('Enter word:')
+v1=model1.wv[wrd]
+similar_words=model1.wv.most_similar(wrd)
+for x in similar_words:
+  print(x)
+
+--
+
+print(data1)
+dat = []
+
+for i in range(2, len(data1) - 2):
+    context = [data1[i - 2], data1[i - 1], data1[i + 1], data1[i + 2]]
+    target = data1[i]
+    dat.append((context, target))
+
+print(dat[:5])
+
+if len(dat) > 1:
+    print(dat[1][0])
+else:
+    print("Not enough data to create the second context-target pair.")
+
+--
+
+
+for val in dat:
+    print(val[0], val[1])
+
+i = 3
+
+if len(dat) > i:
+    print(dat[i])
+
+    print(model1.predict_output_word(dat[i][0]))
+else:
+    print("Index 3 does not exist in dat")
+
+--
+
+from sklearn.decomposition import PCA
+words = model1.wv.index_to_key
+X = model1.wv[words]
+pca = PCA(n_components=2)
+result = pca.fit_transform(X)
+plt.figure(figsize=(12, 8))
+plt.scatter(result[:, 0], result[:, 1])
+for i, word in enumerate(words):
+    plt.annotate(
+        word,
+        xy=(result[i, 0], result[i, 1])
+    )
+
+plt.xlabel("Principal Component 1")
+plt.ylabel("Principal Component 2")
+plt.title("CBOW Word Embeddings Visualization using PCA")
+plt.show()
+
+--
+
+context_words = ['alice', 'door', 'found', 'passage']
+
+predictions = model1.predict_output_word(
+    context_words,
+    topn=1
+)
+
+print("Predicted target words:")
+for word, probability in predictions:
+    print(word, probability)
+
+--
+
+w1 = input("Enter word 1: ").lower()
+w2 = input("Enter word 2: ").lower()
+w3 = input("Enter word 3: ").lower()
+w4 = input("Enter word 4: ").lower()
+
+context_words = [w1, w2, w3, w4]
+
+predictions = model1.predict_output_word(context_words, topn=1)
+
+print("Predicted target words:")
+for word, probability in predictions:
+    print(word, probability)
+
